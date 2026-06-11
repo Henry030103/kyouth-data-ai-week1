@@ -1,0 +1,19 @@
+# Ignore data folders
+data/
+week1/data/
+
+# Ignore virtual environment
+.venv/
+week1/.venv/
+
+# Ignore cache
+__pycache__/
+week1/src/__pycache__/
+.ruff_cache/
+week1/.ruff_cache/
+
+# Ignore generated files
+*.mhtml
+*.html
+*.json
+*.db
