@@ -13,7 +13,7 @@ week1/src/__pycache__/
 week1/.ruff_cache/
 
 # Ignore generated files
-*.mhtml
+
 *.html
 *.json
 *.db
