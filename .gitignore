@@ -1,10 +1,16 @@
 # Ignore data folders
 data/
 week1/data/
+!week_2/data/
+!week_2/data/.gitkeep
 
 # Ignore virtual environment
 .venv/
 week1/.venv/
+
+# Ignore API keys
+.env
+week_2/.env
 
 # Ignore cache
 __pycache__/
