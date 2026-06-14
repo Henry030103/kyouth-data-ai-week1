@@ -6,13 +6,13 @@ from google import genai
 
 
 MODEL_NAME = "gemini-2.5-flash-lite"
-DB_PATH = "data/jobs_d1.db"                 # Location of the database
+DB_PATH = "data/jobs_d1.db"
 RATE_LIMIT_FILE = "rate_limits.txt"
 
 
-def estimate_tokens(text: str) -> int:       # This function estimates token usage.
+def estimate_tokens(text: str) -> int:
     words = text.split()
-    return len(words) * 4                    # This assumes each word uses around 4 tokens. This follows the bonus instruction if token count is not returned.
+    return len(words) * 4
 
 
 def get_rate_limit(model_name: str) -> int:
@@ -22,8 +22,7 @@ def get_rate_limit(model_name: str) -> int:
                 parts = line.split()
 
                 if len(parts) == 4 and parts[0] == model_name:
-                    rpm = int(parts[1])
-                    return rpm
+                    return int(parts[1])
 
     except Exception:
         print("Could not read rate_limits.txt. Using default RPM = 5.")
@@ -31,31 +30,90 @@ def get_rate_limit(model_name: str) -> int:
     return 5
 
 
-def create_prompt(rows):
+def create_baseline_prompt(rows):
     prompt = """
-Extract the technical stack from each job description.
+You are an advanced job market analysis assistant. 
+Your task is to carefully read each job title and job description below, understand the technical requirements, identify all possible technologies, tools, programming languages, databases, cloud platforms, frameworks, libraries, and developer tools, and then provide the extracted technical stack for every job. Please avoid soft skills and general responsibilities. Please make sure your answer is clear and complete.
 
-Return ONLY in this format:
-source_id | skill1, skill2, skill3
-
-Rules:
-- One line for each job.
-- Do not include explanation.
-- Do not include soft skills.
-- If no technical stack is found, write: Not specified.
-
-Jobs:
+Return the result for every job.
 """
 
     for source_id, job_title, description in rows:
         prompt += f"""
 Source ID: {source_id}
 Job Title: {job_title}
-Description: {description[:1000]}
+Full Job Description:
+{description}
 ---
 """
 
     return prompt
+
+
+def create_optimized_prompt(rows):
+    prompt = """
+Extract technical stack only.
+
+Format:
+source_id | skill1, skill2, skill3
+
+Rules:
+- One line per job.
+- No explanation.
+- No soft skills.
+- If none, write: Not specified.
+
+Jobs:
+"""
+
+    for source_id, job_title, description in rows:
+        prompt += f"""
+ID: {source_id}
+Title: {job_title}
+Desc: {description[:1000]}
+---
+"""
+
+    return prompt
+
+
+def show_prompt_optimization_proof(cursor):
+    cursor.execute(
+        """
+        SELECT source_id, job_title, description
+        FROM jobs
+        LIMIT 5
+        """
+    )
+
+    sample_rows = cursor.fetchall()
+
+    if not sample_rows:
+        print("No rows available for prompt optimization proof.")
+        return 0
+
+    baseline_prompt = create_baseline_prompt(sample_rows)
+    optimized_prompt = create_optimized_prompt(sample_rows)
+
+    baseline_tokens = estimate_tokens(baseline_prompt)
+    optimized_tokens = estimate_tokens(optimized_prompt)
+
+    if baseline_tokens == 0:
+        reduction_percent = 0
+    else:
+        reduction_percent = ((baseline_tokens - optimized_tokens) / baseline_tokens) * 100
+
+    print("\n--- Prompt Optimization Proof ---")
+    print(f"Baseline prompt tokens: {baseline_tokens}")
+    print(f"Optimized prompt tokens: {optimized_tokens}")
+    print(f"Token reduction: {reduction_percent:.2f}%")
+
+    if reduction_percent > 5:
+        print("Result: Token usage reduced by more than 5%.")
+    else:
+        print("Result: Token reduction is less than 5%.")
+
+    return reduction_percent
 
 
 def call_gemini(prompt: str):
@@ -87,7 +145,7 @@ def call_gemini(prompt: str):
         return "", estimate_tokens(prompt), str(error)
 
 
-def parse_response(response_text: str):                  # This function reads Gemini’s answer.
+def parse_response(response_text: str):
     results = {}
 
     lines = response_text.splitlines()
@@ -104,6 +162,35 @@ def parse_response(response_text: str):                  # This function reads G
     return results
 
 
+def calculate_quality(cursor):
+    cursor.execute(
+        """
+        SELECT tech_stack
+        FROM jobs
+        WHERE tech_stack IS NOT NULL AND TRIM(tech_stack) != ''
+        """
+    )
+
+    rows = cursor.fetchall()
+    tech_stacks = [row[0].strip() for row in rows]
+
+    total_tagged = len(tech_stacks)
+    not_specified_count = tech_stacks.count("Not specified")
+
+    duplicate_count = total_tagged - len(set(tech_stacks))
+
+    print("\n--- Quality Measurement ---")
+    print(f"Total tagged rows: {total_tagged}")
+    print(f"Not specified count: {not_specified_count}")
+    print(f"Duplicate tech_stack count: {duplicate_count}")
+
+    return {
+        "total_tagged": total_tagged,
+        "not_specified_count": not_specified_count,
+        "duplicate_count": duplicate_count,
+    }
+
+
 def tag_data(db_url: str):
     start_time = time.time()
     total_tokens = 0
@@ -113,18 +200,24 @@ def tag_data(db_url: str):
     retry_seconds = int(60 / rpm) + 2
 
     try:
-        conn = sqlite3.connect(db_url)                 # This connects to the database and prepares SQL commands.
+        conn = sqlite3.connect(db_url)
         cursor = conn.cursor()
 
     except Exception as error:
         print(f"Database connection failed: {error}")
-        return
+        return {
+            "total_tokens": 0,
+            "time_ms": 0,
+            "error": str(error),
+        }
 
     try:
+        optimization_reduction = show_prompt_optimization_proof(cursor)
+
         while True:
-            cursor.execute(                                 # This selects jobs where tech_stack is empty. It does not select jobs that already have tech_stack.
+            cursor.execute(
                 """
-                SELECT source_id, job_title, description           
+                SELECT source_id, job_title, description
                 FROM jobs
                 WHERE tech_stack IS NULL OR TRIM(tech_stack) = ''
                 LIMIT ?
@@ -132,15 +225,13 @@ def tag_data(db_url: str):
                 (batch_size,),
             )
 
-            rows = cursor.fetchall()                       # This gets the selected rows from the database.
+            rows = cursor.fetchall()
 
             if not rows:
-                total_time = (time.time() - start_time) * 1000
-                print("No data to tag")
-                print(f"Total tokens used: {total_tokens}, took {total_time:.3f}ms")
+                print("\nNo data to tag")
                 break
 
-            prompt = create_prompt(rows)
+            prompt = create_optimized_prompt(rows)
 
             response_text, tokens_used, error = call_gemini(prompt)
             total_tokens += tokens_used
@@ -161,10 +252,9 @@ def tag_data(db_url: str):
 
             for source_id, job_title, description in rows:
                 source_id_text = str(source_id)
-
                 tech_stack = results.get(source_id_text, "Not specified")
 
-                cursor.execute(                            # This updates the tech_stack column for one job.
+                cursor.execute(
                     """
                     UPDATE jobs
                     SET tech_stack = ?
@@ -176,18 +266,39 @@ def tag_data(db_url: str):
                 print(f"Analyzed Job {source_id}: {tech_stack}")
 
             conn.commit()
-
             time.sleep(retry_seconds)
+
+        quality_result = calculate_quality(cursor)
+
+        total_time = (time.time() - start_time) * 1000
+
+        print(f"\nTotal tokens used: {total_tokens}, took {total_time:.3f}ms")
+
+        return {
+            "total_tokens": total_tokens,
+            "time_ms": total_time,
+            "optimization_reduction_percent": optimization_reduction,
+            "quality": quality_result,
+        }
 
     except Exception as error:
         print(f"Unexpected error handled safely: {error}")
+
+        return {
+            "total_tokens": total_tokens,
+            "time_ms": (time.time() - start_time) * 1000,
+            "error": str(error),
+        }
 
     finally:
         conn.close()
 
 
 def main():
-    tag_data(DB_PATH)
+    result = tag_data(DB_PATH)
+
+    print("\n--- Returned Result ---")
+    print(result)
 
 
 if __name__ == "__main__":
