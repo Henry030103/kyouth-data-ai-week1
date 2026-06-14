@@ -441,6 +441,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "google-genai" },
+    { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "requests" },
 ]
@@ -448,6 +449,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "google-genai", specifier = ">=2.8.0" },
+    { name = "pydantic", specifier = ">=2.13.4" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "requests", specifier = ">=2.34.2" },
 ]
