@@ -10,7 +10,7 @@ DB_PATH = "data/jobs_d1.db"
 RATE_LIMIT_FILE = "rate_limits.txt"
 
 
-def estimate_tokens(text: str) -> int:
+def estimate_tokens(text: str) -> int:  # This function estimates token usage.
     words = text.split()
     return len(words) * 4
 
@@ -21,7 +21,7 @@ def get_rate_limit(model_name: str) -> int:
             for line in file:
                 parts = line.split()
 
-                if len(parts) == 4 and parts[0] == model_name:
+                if len(parts) == 4 and parts[0] == model_name:  # If the line has 4 parts and the model name matches, return the second name as RPM
                     return int(parts[1])
 
     except Exception:
@@ -30,7 +30,7 @@ def get_rate_limit(model_name: str) -> int:
     return 5
 
 
-def create_baseline_prompt(rows):
+def create_baseline_prompt(rows):  #PROMPT THE STUFF BELOW
     prompt = """
 You are an advanced job market analysis assistant. 
 Your task is to carefully read each job title and job description below, understand the technical requirements, identify all possible technologies, tools, programming languages, databases, cloud platforms, frameworks, libraries, and developer tools, and then provide the extracted technical stack for every job. Please avoid soft skills and general responsibilities. Please make sure your answer is clear and complete.
@@ -38,7 +38,7 @@ Your task is to carefully read each job title and job description below, underst
 Return the result for every job.
 """
 
-    for source_id, job_title, description in rows:
+    for source_id, job_title, description in rows:   #loops through each job.
         prompt += f"""
 Source ID: {source_id}
 Job Title: {job_title}
@@ -77,14 +77,14 @@ Desc: {description[:1000]}
     return prompt
 
 
-def show_prompt_optimization_proof(cursor):
+def show_prompt_optimization_proof(cursor):  #gets 5 sample jobs from the database.
     cursor.execute(
         """
         SELECT source_id, job_title, description
         FROM jobs
         LIMIT 5
         """
-    )
+    ) 
 
     sample_rows = cursor.fetchall()
 
@@ -145,10 +145,10 @@ def call_gemini(prompt: str):
         return "", estimate_tokens(prompt), str(error)
 
 
-def parse_response(response_text: str):
+def parse_response(response_text: str):  # This function reads Gemini’s response and converts it into a dictionary.
     results = {}
 
-    lines = response_text.splitlines()
+    lines = response_text.splitlines()  # split the response into lines 
 
     for line in lines:
         if "|" in line:
@@ -172,12 +172,12 @@ def calculate_quality(cursor):
     )
 
     rows = cursor.fetchall()
-    tech_stacks = [row[0].strip() for row in rows]
+    tech_stacks = [row[0].strip() for row in rows]  # puts all tech stack values into a list.
 
-    total_tagged = len(tech_stacks)
+    total_tagged = len(tech_stacks)     # count how many rows are tagged
     not_specified_count = tech_stacks.count("Not specified")
 
-    duplicate_count = total_tagged - len(set(tech_stacks))
+    duplicate_count = total_tagged - len(set(tech_stacks))   # counts duplicate tech stack values.
 
     print("\n--- Quality Measurement ---")
     print(f"Total tagged rows: {total_tagged}")
@@ -191,9 +191,9 @@ def calculate_quality(cursor):
     }
 
 
-def tag_data(db_url: str):
-    start_time = time.time()
-    total_tokens = 0
+def tag_data(db_url: str):  # The input is the database path.
+    start_time = time.time()  # records when the program starts.
+    total_tokens = 0          # starts token count from zero
 
     rpm = get_rate_limit(MODEL_NAME)
     batch_size = max(1, min(5, rpm // 2))
@@ -212,7 +212,7 @@ def tag_data(db_url: str):
         }
 
     try:
-        optimization_reduction = show_prompt_optimization_proof(cursor)
+        optimization_reduction = show_prompt_optimization_proof(cursor)  # This runs the bonus prompt comparison before tagging.
 
         while True:
             cursor.execute(
@@ -248,9 +248,9 @@ def tag_data(db_url: str):
                     print(f"Attempt 2 failed: {error}")
                     break
 
-            results = parse_response(response_text)
+            results = parse_response(response_text)   # This converts Gemini’s answer into dictionary form.
 
-            for source_id, job_title, description in rows:
+            for source_id, job_title, description in rows:  # Loops through each job in batch
                 source_id_text = str(source_id)
                 tech_stack = results.get(source_id_text, "Not specified")
 
