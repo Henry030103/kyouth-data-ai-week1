@@ -215,7 +215,7 @@ Skills: {",".join(job_skills)}
     }
 
 
-def find_skill_gaps(input_file_path: str, db_url: str) -> SkillGapResult:
+def find_skill_gaps(input_file_path: str, db_url: str) -> SkillGapResult:  # require function signature, which means program must hv a function named find_skill_gap, and function must accept two inputs and return a SkillGapResult.
     start_time = time.time()     # start measuring time
 
     resume_raw = read_resume(input_file_path)    # read resume
