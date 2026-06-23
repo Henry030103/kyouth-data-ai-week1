@@ -6,20 +6,30 @@ week1/data/
 
 # Ignore virtual environment
 .venv/
+**/.venv/
 week1/.venv/
 
 # Ignore API keys
 .env
+**/.env
 week_2/.env
 
 # Ignore cache
 __pycache__/
-week1/src/__pycache__/
+**/__pycache__/
 .ruff_cache/
 week1/.ruff_cache/
+*.pyc
+.DS_Store
+
 
 # Ignore generated files
-
-*.html
 *.json
 *.db
+
+# Allow required Week 3 files
+!week_3/frontend/src/templates/chat_page.html
+!week_3/backend/src/week_2/data/
+!week_3/backend/src/week_2/data/.gitkeep
+!week_3/backend/src/week_2/data/resume.txt
+!week_3/backend/src/week_2/data/jobs_d1.db
