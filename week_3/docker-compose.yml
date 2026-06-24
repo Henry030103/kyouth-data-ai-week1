@@ -1,0 +1,30 @@
+services:
+  backend:
+    image: backend:1.0
+    pull_policy: build
+    build:
+      context: ./backend
+    ports:
+      - "8001:8001"
+    environment:
+      OLLAMA_HOST: http://host.docker.internal:11434
+    networks:
+      - week3-network
+
+  frontend:
+    image: frontend:1.0
+    pull_policy: build
+    build:
+      context: ./frontend
+    ports:
+      - "8000:8000"
+    environment:
+      BACKEND_URL: http://backend:8001/chat
+    depends_on:
+      - backend
+    networks:
+      - week3-network
+
+networks:
+  week3-network:
+    driver: bridge
