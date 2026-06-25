@@ -90,10 +90,66 @@
                     </form>
                 </div>
             </div>
+            <!-- Paste the bonus database visualisation section here -->
+            <div class="card mt-3">
+                <div class="card-body">
+                    <h5 class="card-title">Database Visualisation Bonus</h5>
+
+                    <div class="input-group mb-3">
+                        <input type="text" id="dbSearchInput" class="form-control"
+                            placeholder="Search jobs, companies, locations, or skills...">
+
+                        <button class="btn btn-outline-primary" type="button" id="dbSearchButton">
+                            Search DB
+                        </button>
+                    </div>
+
+                    <p class="small-note">
+                        This section visualises job and skill data from the database using Chart.js.
+                    </p>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="text-center">Top Skills Pie Chart</h6>
+                            <canvas id="skillPieChart"></canvas>
+                        </div>
+
+                        <div class="col-md-6">
+                            <h6 class="text-center">Job Distribution Bar Chart</h6>
+                            <canvas id="jobBarChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="mt-4">
+                        <h6>Database Search Results</h6>
+
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered">
+                                <thead>
+                                    <tr>
+                                        <th>Job Title</th>
+                                        <th>Company</th>
+                                        <th>Location</th>
+                                        <th>Skills</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dbResultsBody">
+                                    <tr>
+                                        <td colspan="4" class="text-muted">
+                                            Click Search DB to load database records.
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs" type="module"></script>
 
     <script type="module">
@@ -198,6 +254,142 @@
                 console.error(error);
             }
         });
+        
+        // bonus Chart.js JavaScript code here
+        const dbSearchInput = document.getElementById("dbSearchInput");
+        const dbSearchButton = document.getElementById("dbSearchButton");
+        const dbResultsBody = document.getElementById("dbResultsBody");
+
+        let skillPieChart = null;
+        let jobBarChart = null;
+
+        function buildChartColors(count) {
+            const colors = [];
+
+            for (let index = 0; index < count; index++) {
+                const hue = (index * 45) % 360;
+                colors.push(`hsl(${hue}, 70%, 60%)`);
+            }
+
+            return colors;
+        }
+
+        function renderDatabaseTable(rows) {
+            dbResultsBody.innerHTML = "";
+
+            if (!rows || rows.length === 0) {
+                dbResultsBody.innerHTML = `
+            <tr>
+                <td colspan="4" class="text-muted">No matching records found.</td>
+            </tr>
+        `;
+                return;
+            }
+
+            rows.slice(0, 20).forEach((row) => {
+                const tableRow = document.createElement("tr");
+
+                tableRow.innerHTML = `
+            <td>${row.title || "N/A"}</td>
+            <td>${row.company || "N/A"}</td>
+            <td>${row.location || "N/A"}</td>
+            <td>${row.skills || "N/A"}</td>
+        `;
+
+                dbResultsBody.appendChild(tableRow);
+            });
+        }
+
+        function renderCharts(data) {
+            const skillContext = document.getElementById("skillPieChart");
+            const jobContext = document.getElementById("jobBarChart");
+
+            if (skillPieChart) {
+                skillPieChart.destroy();
+            }
+
+            if (jobBarChart) {
+                jobBarChart.destroy();
+            }
+
+            skillPieChart = new Chart(skillContext, {
+                type: "pie",
+                data: {
+                    labels: data.skill_labels,
+                    datasets: [
+                        {
+                            label: "Top Skills",
+                            data: data.skill_values,
+                            backgroundColor: buildChartColors(data.skill_labels.length)
+                        }
+                    ]
+                }
+            });
+
+            jobBarChart = new Chart(jobContext, {
+                type: "bar",
+                data: {
+                    labels: data.job_labels,
+                    datasets: [
+                        {
+                            label: "Job Count",
+                            data: data.job_values,
+                            backgroundColor: buildChartColors(data.job_labels.length)
+                        }
+                    ]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        async function loadDatabaseAnalytics() {
+            const searchValue = dbSearchInput.value.trim();
+
+            try {
+                const response = await fetch(`/analytics?search=${encodeURIComponent(searchValue)}`);
+
+                if (!response.ok) {
+                    throw new Error("Failed to load database analytics.");
+                }
+
+                const data = await response.json();
+
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                renderCharts(data);
+                renderDatabaseTable(data.rows);
+
+            } catch (error) {
+                dbResultsBody.innerHTML = `
+            <tr>
+                <td colspan="4" class="text-danger">
+                    Unable to load database visualisation data.
+                </td>
+            </tr>
+        `;
+
+                console.error(error);
+            }
+        }
+
+        dbSearchButton.addEventListener("click", loadDatabaseAnalytics);
+
+        dbSearchInput.addEventListener("keydown", function (event) {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                loadDatabaseAnalytics();
+            }
+        });
+
+        loadDatabaseAnalytics();
     </script>
 </body>
 
